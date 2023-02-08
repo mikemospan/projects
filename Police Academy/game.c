@@ -1,3 +1,5 @@
+// NOTE GAME.C WAS NOT WRITTEN BY ME
+
 /**
  * game.c - the client program.
  * This reads in data from a file to create a map of cities and roads,
