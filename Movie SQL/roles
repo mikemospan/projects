@@ -1,0 +1,80 @@
+#!/usr/bin/python3
+
+import sys
+import psycopg2
+import helpers
+
+### Globals
+
+db = None
+usage = f"Usage: {sys.argv[0]} FullName"
+
+### Command-line args
+
+if len(sys.argv) < 2:
+   print(usage)
+   exit(1)
+
+# process the command-line args ...
+
+name = sys.argv[1]
+
+### Queries
+
+main_query = """
+select concat(PlaysRole.role, ' in ', Movies.title, ' (', Movies.year, ')') as result
+from People
+join Principals on Principals.person = People.id
+left outer join PlaysRole on PlaysRole.inMovie = Principals.id
+join Movies on Movies.id = Principals.movie
+where People.id = %s and (Principals.job = 'actor' or Principals.job = 'actress' or Principals.job = 'self')
+order by People.id, Movies.year, Movies.title, PlaysRole.role
+"""
+
+info_query = """
+select People.id, coalesce(max(
+   case
+      when Principals.job = 'actor' or Principals.job = 'actress' or Principals.job = 'self'
+           then 'true'
+      else null
+   end
+), 'false') as isActing
+from People
+join Principals on People.id = Principals.person
+left outer join PlaysRole on Principals.id = PlaysRole.inMovie
+where People.name = %s
+group by People.id
+order by People.id
+"""
+
+### Manipulating database
+
+try:
+   db = psycopg2.connect("dbname=ass2")
+   cur = db.cursor()
+
+   cur.execute(info_query, [name])
+   numPeople = cur.rowcount
+
+   if numPeople == 0:
+      print("No such person")
+
+   counter = 1
+   for person in cur.fetchall():
+      if numPeople > 1:
+         print(name + ' #' + str(counter))
+         counter += 1
+
+      if person[1] == 'false':
+         print("No acting roles")
+      else:
+         cur.execute(main_query, [person[0]])
+         for movie in cur.fetchall():
+            print(movie[0])
+
+except Exception as err:
+   print("DB error: ", err)
+finally:
+   if db:
+      db.close()
+

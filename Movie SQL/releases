@@ -1,0 +1,76 @@
+#!/usr/bin/python3
+
+import sys
+import psycopg2
+import helpers
+
+### Globals
+
+db = None
+usage = f"Usage: {sys.argv[0]} 'MovieName' Year"
+
+### Command-line args
+
+if len(sys.argv) < 3:
+   print(usage)
+   exit(1)
+
+# process the command-line args ...
+
+title = sys.argv[1]
+year = sys.argv[2]
+
+### Queries
+
+main_query = """
+select Countries.name
+from Countries
+join Releasedin on Releasedin.country = Countries.code
+join Movies on Movies.id = Releasedin.movie
+where Movies.title = %s and Movies.year = %s
+order by Countries.name
+"""
+
+count_query = """
+with numMovies as (
+   select count(*)
+   from Movies
+   where Movies.title = %s and Movies.year = %s
+),
+numReleases as (
+   select count(*)
+   from Releasedin
+   join Movies on Movies.id = Releasedin.movie
+   where Movies.title = %s and Movies.year = %s
+)
+
+select numMovies.count, numReleases.count
+from numMovies, numReleases
+"""
+
+### Manipulating database
+
+try:
+   db = psycopg2.connect("dbname=ass2")
+   cur = db.cursor()
+   
+   cur.execute(count_query, [title, year, title, year])
+   count = cur.fetchone()
+
+   if len(year) < 4:
+      print("Invalid year")
+   elif count[0] == 0:
+      print("No such movie")
+   elif count[1] == 0:
+      print("No releases")
+   
+   cur.execute(main_query, [title, year])
+   for tuple in cur.fetchall():
+      print(tuple[0])
+
+except Exception as err:
+   print("DB error: ", err)
+finally:
+   if db:
+      db.close()
+

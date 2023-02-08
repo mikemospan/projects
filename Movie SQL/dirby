@@ -1,0 +1,79 @@
+#!/usr/bin/python3
+
+import sys
+import psycopg2
+import helpers
+
+### Globals
+
+db = None
+usage = f"Usage: {sys.argv[0]} FullName"
+
+### Command-line args
+
+if len(sys.argv) < 2:
+   print(usage)
+   exit(1)
+
+# process the command-line args ...
+
+name = sys.argv[1]
+
+### Queries
+
+main_query = """
+select concat(Movies.title, ' (', Movies.year, ')')
+from Movies
+join Principals on Principals.movie = Movies.id
+join People on Principals.person = People.id
+where Principals.job = 'director' and People.id = (
+   select People.id
+   from People
+   join Principals on Principals.person = People.id
+   where Principals.job = 'director' and People.name = %s
+   order by People.id
+   limit 1)
+order by Movies.year
+"""
+
+count_query = """
+with numPeople as (
+   select count(*)
+   from People
+   where People.name = %s
+),
+numDirectors as (
+   select count(*)
+   from People
+   join Principals on Principals.person = People.id
+   where Principals.job = 'director' and People.name = %s
+)
+
+select numPeople.count, numDirectors.count
+from numPeople, numDirectors
+"""
+
+### Manipulating database
+
+try:
+   db = psycopg2.connect("dbname=ass2")
+   cur = db.cursor()
+   
+   cur.execute(count_query, [name, name])
+   count = cur.fetchone()
+   if count[0] == 0:
+      print("No such person")
+   elif count[0] == 1 and count[1] == 0:
+      print(name + " has not directed any movies")
+   elif count[1] == 0:
+      print("None of the people called " + name + " has directed any films")
+
+   cur.execute(main_query, [name])
+   for tuple in cur.fetchall():
+      print(tuple[0])
+except Exception as err:
+   print("DB error: ", err)
+finally:
+   if db:
+      db.close()
+

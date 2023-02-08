@@ -1,0 +1,82 @@
+#!/usr/bin/python3
+
+import sys
+import psycopg2
+import helpers
+
+### Globals
+
+db = None
+usage = f"Usage: {sys.argv[0]} 'PartialMovieName'"
+
+### Command-line args
+
+if len(sys.argv) < 2:
+   print(usage)
+   exit(1)
+
+# process the command-line args ...
+
+partial_name = '%' + sys.argv[1] + '%'
+
+### Queries
+
+princiapls_query = """
+select (
+   case
+      when Principals.job <> 'actor' and Principals.job <> 'actress' and Principals.job <> 'self'
+           then concat(People.name, ': ',  Principals.job)
+      when PlaysRole.role is null then concat(People.name, ' plays ???')
+      else concat(People.name, ' plays ',  PlaysRole.role)
+   end
+) as principals
+from Principals
+join People on People.id = Principals.person
+join Movies on Movies.id = Principals.movie
+left outer join PlaysRole on PlaysRole.inMovie = Principals.id
+where Movies.id = %s
+order by Principals.ord
+"""
+
+movies_query = """
+select row_number() over (order by Movies.title, Movies.year) as num,
+       Movies.id, concat(Movies.title, ' (', Movies.year, ')') as result
+from Movies
+where upper(Movies.title) like upper(%s)
+"""
+
+### Manipulating database
+
+try:
+   db = psycopg2.connect("dbname=ass2")
+   cur = db.cursor()
+   
+   movieId = None
+   cur.execute(movies_query, [partial_name])
+   if cur.rowcount == 0:
+      print("No movie matching: '" + sys.argv[1] + "'")
+   elif cur.rowcount > 1:
+      for movie in cur.fetchall():
+         print(str(movie[0]) + '. ' + movie[2])
+      movieNum = int(input("Which movie? "))
+      
+      cur.execute(movies_query, [partial_name])
+      for movie in cur.fetchall():
+         if movie[0] == movieNum:
+            movieId = movie[1]
+            print(movie[2])
+   else:
+      movie = cur.fetchone()
+      movieId = movie[1]
+      print(movie[2])
+
+   cur.execute(princiapls_query, [movieId])
+   for principals in cur.fetchall():
+      print(principals[0])
+
+except Exception as err:
+   print("DB error: ", err)
+finally:
+   if db:
+      db.close()
+
